@@ -1,0 +1,31 @@
+name: Build and Deploy to Kind
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build image
+      run: |
+        docker build -t ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:${{ github.sha }} .
+        docker tag ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:${{ github.sha }} ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:latest
+
+    - name: Login to Aliyun ACR
+      run: |
+        echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login ${{ secrets.ALIYUN_REGISTRY }} -u ${{ secrets.ALIYUN_REGISTRY_USER }} --password-stdin
+
+    - name: Push image
+      run: |
+        docker push ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:${{ github.sha }}
+        docker push ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:latest
+
+    - name: Update deployment
+      run: |
+        kubectl set image deployment/cicd-demo cicd-demo=${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAME_SPACE }}/ci-cd:${{ github.sha }}
+        kubectl rollout status deployment/cicd-demo --timeout=120s
